@@ -40,7 +40,7 @@ export default {
       this.errorMessage = "";
       
       try {
-        const response = await axios.post("http://localhost:8080/synerry/server/shorten-url.php", {
+        const response = await axios.post("http://localhost/synerry/server/shorten-url.php", {
           full_url: this.fullUrl,
         });
 
