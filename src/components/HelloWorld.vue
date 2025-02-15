@@ -1,4 +1,5 @@
 <template>
+  <html lang="th"></html>
   <div class="short-url-container">
     <div class="short-url-card">
       <h2>✨ สร้าง Short URL ✨</h2>
@@ -41,25 +42,33 @@ export default {
       
       try {
         const response = await axios.post("http://localhost/synerry/server/shorten-url.php", {
-          full_url: this.fullUrl,
+          full_url: this.fullUrl
         });
-
+        
         if (response.data.error) {
           this.errorMessage = response.data.error;
         } else {
+          // ตรวจสอบ response และดึง short_url
           this.shortUrl = response.data.short_url;
+          console.log("Generated Short URL: ", this.shortUrl); 
         }
       } catch (error) {
-        this.errorMessage = "เกิดข้อผิดพลาดในการเชื่อมต่อกับเซิร์ฟเวอร์";
+        this.errorMessage = "เกิดข้อผิดพลาดในการ Short URL";
+        console.error("Error: ", error); // ดูใน console ถ้ามีข้อผิดพลาด
       }
     },
     copyToClipboard() {
-      navigator.clipboard.writeText(this.shortUrl);
-      alert("คัดลอก Short URL แล้ว! 📋");
+      if (this.shortUrl) {
+        navigator.clipboard.writeText(this.shortUrl);
+        alert("คัดลอก Short URL แล้ว! 📋");
+      } else {
+        alert("ยังไม่มี URL ที่จะคัดลอก");
+      }
     }
   },
 };
 </script>
+
 
 <style scoped>
 .short-url-container {

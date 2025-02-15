@@ -7,6 +7,11 @@ $dbname = 'my-vue-synerry';
 $username = 'root';
 $password = '';
 
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
+
+// การเชื่อมต่อฐานข้อมูล
 try {
     $conn = new PDO("mysql:host=$host;port=3306;dbname=$dbname;charset=utf8", $username, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -14,10 +19,10 @@ try {
     die(json_encode(["error" => "ไม่สามารถเชื่อมต่อกับฐานข้อมูล: " . $e->getMessage()]));
 }
 
-// ตรวจสอบว่าเป็นคำขอแบบ POST หรือไม่
-if ($_SERVER["REQUEST_METHOD"] !== "POST") {
-    echo json_encode(["error" => "รองรับเฉพาะคำขอแบบ POST"]);
-    exit;
+// หากเป็นคำขอแบบ OPTIONS (preflight) ให้ตอบกลับ 200
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+   echo json_encode(["error" => "รองรับเฉพาะคำขอแบบ POST"]);
+   exit;
 }
 
 // รับค่า JSON จาก Vue
@@ -27,6 +32,7 @@ if (!isset($data['full_url']) || empty(trim($data['full_url']))) {
     echo json_encode(["error" => "กรุณาป้อน URL"]);
     exit;
 }
+error_log("Received Data: " . json_encode($data));
 
 // กรองและตรวจสอบ URL
 $full_url = trim(strip_tags($data['full_url']));
@@ -37,38 +43,39 @@ if (!filter_var($full_url, FILTER_VALIDATE_URL)) {
     exit;
 }
 
+// ดึง host จาก full_url
+$parsedUrl = parse_url($full_url);
+$domain = $parsedUrl['scheme'] . "://" . $parsedUrl['host']; 
+
+// ดึง IP และ User-Agent
+$user_ip = $_SERVER['REMOTE_ADDR'];
+$user_agent = $_SERVER['HTTP_USER_AGENT'];
+
 // ตรวจสอบว่า URL นี้เคยถูกย่อหรือไม่
-$stmt = $conn->prepare("SELECT short_code FROM short_urls WHERE full_url = :full_url");
+$stmt = $conn->prepare("SELECT id, short_code FROM short_urls WHERE full_url = :full_url");
 $stmt->bindParam(':full_url', $full_url);
 $stmt->execute();
 $existing = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if ($existing) {
-    echo json_encode(["short_url" => "http://localhost/synerry/" . $existing['short_code']]);
-    exit;
-}
-
-// ฟังก์ชันสร้าง Short Code
-function generateShortCode($length = 6) {
-    return substr(str_shuffle("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"), 0, $length);
-}
-
-// ตรวจสอบว่า short_code ไม่ซ้ำ
-do {
-    $short_code = generateShortCode();
-    $stmt = $conn->prepare("SELECT id FROM short_urls WHERE short_code = :short_code");
-    $stmt->bindParam(':short_code', $short_code);
-    $stmt->execute();
-} while ($stmt->rowCount() > 0);
-
-// บันทึกลงฐานข้อมูล
-$stmt = $conn->prepare("INSERT INTO short_urls (full_url, short_code, created_at) VALUES (:full_url, :short_code, NOW())");
-$stmt->bindParam(':full_url', $full_url);
-$stmt->bindParam(':short_code', $short_code);
-
-if ($stmt->execute()) {
-    echo json_encode(["short_url" => "http://localhost/synerry/" . $short_code]);
+    // เมื่อคลิกที่ URL จะบันทึกการคลิก
+    $short_id = $existing['id'];
+    
+    // บันทึกข้อมูลการคลิกในตาราง url_statsnew
+    $stmt = $conn->prepare("INSERT INTO url_statsnew (short_id, ip_address, user_agent, clicked_at) 
+                           VALUES (:short_id, :ip_address, :user_agent, NOW())");
+    $stmt->bindParam(':short_id', $short_id);
+    $stmt->bindParam(':ip_address', $user_ip);
+    $stmt->bindParam(':user_agent', $user_agent);
+    
+    if ($stmt->execute()) {
+        // เปลี่ยนเส้นทางไปยัง full_url
+        header("Location: " . $full_url);
+        exit;
+    } else {
+        echo json_encode(["error" => "เกิดข้อผิดพลาดในการบันทึกข้อมูลการคลิก"]);
+    }
 } else {
-    echo json_encode(["error" => "เกิดข้อผิดพลาดในการบันทึกข้อมูล"]);
+    echo json_encode(["error" => "URL ไม่พบในฐานข้อมูล"]);
 }
 ?>
